@@ -239,30 +239,30 @@ class BrowserUseServer:
 			)
 			# Session management (MCP-specific)
 			tools.extend([
-				types.Tool(
-					name='list_sessions',
-					description='List all active browser sessions with their details and last activity time',
-					inputSchema={'type': 'object', 'properties': {}},
-				),
-				types.Tool(
-					name='close_session',
-					description='Close a specific browser session by its ID',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'session_id': {
-								'type': 'string',
-								'description': 'The browser session ID to close (get from list_sessions)',
-							}
-						},
-						'required': ['session_id'],
-					},
-				),
-				types.Tool(
-					name='close_all_sessions',
-					description='Close all active browser sessions and clean up resources',
-					inputSchema={'type': 'object', 'properties': {}},
-				),
+				# types.Tool(
+				# 	name='list_sessions',
+				# 	description='List all active browser sessions with their details and last activity time',
+				# 	inputSchema={'type': 'object', 'properties': {}},
+				# ),
+				# types.Tool(
+				# 	name='close_session',
+				# 	description='Close a specific browser session by its ID',
+				# 	inputSchema={
+				# 		'type': 'object',
+				# 		'properties': {
+				# 			'session_id': {
+				# 				'type': 'string',
+				# 				'description': 'The browser session ID to close (get from list_sessions)',
+				# 			}
+				# 		},
+				# 		'required': ['session_id'],
+				# 	},
+				# ),
+				# types.Tool(
+				# 	name='close_all_sessions',
+				# 	description='Close all active browser sessions and clean up resources',
+				# 	inputSchema={'type': 'object', 'properties': {}},
+				# ),
 			])
 			return tools
 

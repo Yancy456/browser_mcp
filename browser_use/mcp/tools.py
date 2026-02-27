@@ -7,6 +7,12 @@ from browser_use.tools.service import Tools
 # Actions that do not require an active browser session
 NO_BROWSER_ACTIONS = {'wait', 'done', 'read_file', 'replace_file', 'write_file'}
 
+# Actions to exclude from MCP tool list (e.g. ['screenshot'] if vision is disabled)
+MCP_EXCLUDE_ACTIONS: list[str] = ['done', 'read_file', 'replace_file', 'write_file','search_page','search','find_text',
+'read_long_content','evaluate','list_sessions','close_session',
+'close_all_sessions','close_all_sessions','go_back','wait','upload_file',
+'save_as_pdf','dropdown_options','select_dropdown','screenshot','close','extract']
+
 
 def _build_mcp_schema(param_model: type) -> dict[str, Any]:
 	"""Build MCP inputSchema from Pydantic model."""
@@ -20,7 +26,7 @@ def build_agent_tools() -> tuple[list[dict[str, Any]], Tools]:
 	Returns:
 		Tuple of (list of MCP tool dicts, Tools instance for execution)
 	"""
-	tools_instance = Tools()
+	tools_instance = Tools(exclude_actions=MCP_EXCLUDE_ACTIONS)
 	registry = tools_instance.registry.registry
 	mcp_tools = []
 
