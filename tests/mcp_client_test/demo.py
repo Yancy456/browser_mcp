@@ -28,50 +28,50 @@ async def demo_browser_interactions():
         tools = await client.list_tools("browser-use")
         print(f"Available tools: {json.dumps(tools, indent=2)}")
 
-        print("\n2. Browsing to a website...")
-        # Example of navigating to a website (actual implementation depends on browser-use API)
-        nav_result = await client.call_tool(
-            server_name="browser-use",
-            tool_name="browser_navigate",
-            arguments={"url": "https://google.com"}
-        )
-        print(f"Navigation result: {nav_result}")
+        # print("\n2. Browsing to a website...")
+        # # Example of navigating to a website (actual implementation depends on browser-use API)
+        # nav_result = await client.call_tool(
+        #     server_name="browser-use",
+        #     tool_name="browser_navigate",
+        #     arguments={"url": "https://google.com"}
+        # )
+        # print(f"Navigation result: {nav_result}")
 
-        print("\n3. Getting page content...")
-        # Example of getting page content (would depend on actual API)
-        content_result = await client.call_tool(
-            server_name="browser-use",
-            tool_name="browser_get_state",  # Correct function name
-            arguments={}
-        )
-        print(f"Page content result: {content_result}")
-
-        _ = await client.call_tool(
-            server_name="browser-use",
-            tool_name="browser_type",  # Correct function name
-            arguments={"index": 190, "text": "Hello, world!"}
-        )
+        # print("\n3. Getting page content...")
+        # # Example of getting page content (would depend on actual API)
+        # content_result = await client.call_tool(
+        #     server_name="browser-use",
+        #     tool_name="browser_get_state",  # Correct function name
+        #     arguments={}
+        # )
         # print(f"Page content result: {content_result}")
 
-        # 保存完整结果
-        with open("result.json", "w", encoding="utf-8") as f:
-            json.dump(content_result, f, ensure_ascii=False, indent=2)
+        # _ = await client.call_tool(
+        #     server_name="browser-use",
+        #     tool_name="browser_type",  # Correct function name
+        #     arguments={"index": 190, "text": "Hello, world!"}
+        # )
+        # # print(f"Page content result: {content_result}")
 
-        # 从 content 中提取 text 字段并解析为 JSON 单独保存
-        text_payload = None
-        for item in content_result.get("content", []):
-            if item.get("type") == "text":
-                text_payload = item.get("text")
-                break
+        # # 保存完整结果
+        # with open("result.json", "w", encoding="utf-8") as f:
+        #     json.dump(content_result, f, ensure_ascii=False, indent=2)
 
-        if text_payload:
-            try:
-                parsed_text = json.loads(text_payload)
-            except json.JSONDecodeError:
-                parsed_text = {"text": text_payload}
+        # # 从 content 中提取 text 字段并解析为 JSON 单独保存
+        # text_payload = None
+        # for item in content_result.get("content", []):
+        #     if item.get("type") == "text":
+        #         text_payload = item.get("text")
+        #         break
 
-            with open("result_text.json", "w", encoding="utf-8") as f:
-                json.dump(parsed_text, f, ensure_ascii=False, indent=2)
+        # if text_payload:
+        #     try:
+        #         parsed_text = json.loads(text_payload)
+        #     except json.JSONDecodeError:
+        #         parsed_text = {"text": text_payload}
+
+        #     with open("result_text.json", "w", encoding="utf-8") as f:
+        #         json.dump(parsed_text, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
         print(f"Error during browser interaction: {str(e)}")

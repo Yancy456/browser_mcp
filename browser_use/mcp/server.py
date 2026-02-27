@@ -37,8 +37,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from browser_use.llm.anthropic.aws.chat_bedrock import ChatAWSBedrock
-
 # Configure logging for MCP mode - redirect to stderr but preserve critical diagnostics
 logging.basicConfig(
 	stream=sys.stderr, level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True
@@ -90,12 +88,12 @@ _configure_mcp_server_logging()
 logging.disable(logging.CRITICAL)
 
 # Import browser_use modules
-from browser_use import ActionModel, Agent
 from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.config import get_default_llm, get_default_profile, load_browser_use_config
+from browser_use.tools.service import Tools
 from browser_use.filesystem.file_system import FileSystem
 from browser_use.llm.openai.chat import ChatOpenAI
-from browser_use.tools.service import Tools
+from browser_use.mcp.tools import NO_BROWSER_ACTIONS, build_agent_tools
 
 logger = logging.getLogger(__name__)
 
@@ -193,9 +191,9 @@ class BrowserUseServer:
 
 		self.server = Server('browser-use')
 		self.config = load_browser_use_config()
-		self.agent: Agent | None = None
 		self.browser_session: BrowserSession | None = None
-		self.tools: Tools | None = None
+		agent_tools_list, agent_tools_instance = build_agent_tools()
+		self.agent_tools_instance: Tools = agent_tools_instance
 		self.llm: ChatOpenAI | None = None
 		self.file_system: FileSystem | None = None
 		self._telemetry = ProductTelemetry()
@@ -206,6 +204,8 @@ class BrowserUseServer:
 		self.session_timeout_minutes = session_timeout_minutes
 		self._cleanup_task: Any = None
 
+		self._agent_tools_list = agent_tools_list
+
 		# Setup handlers
 		self._setup_handlers()
 
@@ -214,235 +214,57 @@ class BrowserUseServer:
 
 		@self.server.list_tools()
 		async def handle_list_tools() -> list[types.Tool]:
-			"""List all available browser-use tools."""
-			return [
-				# Agent tools
-				# Direct browser control tools
+			"""List all available browser-use tools - same as agent actions plus session management."""
+			tools = [
+				types.Tool(name=t['name'], description=t['description'], inputSchema=t['inputSchema'])
+				for t in self._agent_tools_list
+			]
+			# MCP-specific: get_state (agent gets this automatically each step)
+			tools.insert(
+				0,
 				types.Tool(
-					name='browser_navigate',
-					description='Navigate to a URL in the browser',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'url': {'type': 'string', 'description': 'The URL to navigate to'},
-							'new_tab': {'type': 'boolean', 'description': 'Whether to open in a new tab', 'default': False},
-						},
-						'required': ['url'],
-					},
-				),
-				types.Tool(
-					name='browser_click',
-					description='Click an element by index or at specific viewport coordinates. Use index for elements from browser_get_state, or coordinate_x/coordinate_y for pixel-precise clicking.',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'index': {
-								'type': 'integer',
-								'description': 'The index of the element to click (from browser_get_state). Use this OR coordinates.',
-							},
-							'coordinate_x': {
-								'type': 'integer',
-								'description': 'X coordinate (pixels from left edge of viewport). Use with coordinate_y.',
-							},
-							'coordinate_y': {
-								'type': 'integer',
-								'description': 'Y coordinate (pixels from top edge of viewport). Use with coordinate_x.',
-							},
-							'new_tab': {
-								'type': 'boolean',
-								'description': 'Whether to open any resulting navigation in a new tab',
-								'default': False,
-							},
-						},
-						'oneOf': [
-							{'required': ['index']},
-							{'required': ['coordinate_x', 'coordinate_y']},
-						],
-					},
-				),
-				types.Tool(
-					name='browser_type',
-					description='Type text into an input field',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'index': {
-								'type': 'integer',
-								'description': 'The index of the input element (from browser_get_state)',
-							},
-							'text': {'type': 'string', 'description': 'The text to type'},
-						},
-						'required': ['index', 'text'],
-					},
-				),
-				types.Tool(
-					name='browser_get_state',
-					description='Get the current state of the page including all interactive elements',
+					name='get_state',
+					description='Get current browser state (URL, title, tabs, interactive elements). Equivalent to what agent receives each step.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
 							'include_screenshot': {
 								'type': 'boolean',
-								'description': 'Whether to include a screenshot of the current page',
-								'default': False,
-							}
-						},
-					},
-				),
-				types.Tool(
-					name='browser_extract_content',
-					description='Extract structured content from the current page based on a query',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'query': {'type': 'string', 'description': 'What information to extract from the page'},
-							'extract_links': {
-								'type': 'boolean',
-								'description': 'Whether to include links in the extraction',
-								'default': False,
-							},
-						},
-						'required': ['query'],
-					},
-				),
-				# types.Tool(
-				# 	name='browser_get_html',
-				# 	description='Get the raw HTML of the current page or a specific element by CSS selector',
-				# 	inputSchema={
-				# 		'type': 'object',
-				# 		'properties': {
-				# 			'selector': {
-				# 				'type': 'string',
-				# 				'description': 'Optional CSS selector to get HTML of a specific element. If omitted, returns full page HTML.',
-				# 			},
-				# 		},
-				# 	},
-				# ),
-				types.Tool(
-					name='browser_screenshot',
-					description='Take a screenshot of the current page. Returns base64-encoded image with viewport dimensions.',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'full_page': {
-								'type': 'boolean',
-								'description': 'Whether to capture the full scrollable page or just the visible viewport',
+								'description': 'Whether to include a screenshot',
 								'default': False,
 							},
 						},
 					},
 				),
+			)
+			# Session management (MCP-specific)
+			tools.extend([
 				types.Tool(
-					name='browser_scroll',
-					description='Scroll the page',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'direction': {
-								'type': 'string',
-								'enum': ['up', 'down'],
-								'description': 'Direction to scroll',
-								'default': 'down',
-							}
-						},
-					},
-				),
-				types.Tool(
-					name='browser_go_back',
-					description='Go back to the previous page',
-					inputSchema={'type': 'object', 'properties': {}},
-				),
-				# Tab management
-				types.Tool(
-					name='browser_list_tabs', description='List all open tabs', inputSchema={'type': 'object', 'properties': {}}
-				),
-				types.Tool(
-					name='browser_switch_tab',
-					description='Switch to a different tab',
-					inputSchema={
-						'type': 'object',
-						'properties': {'tab_id': {'type': 'string', 'description': '4 Character Tab ID of the tab to switch to'}},
-						'required': ['tab_id'],
-					},
-				),
-				types.Tool(
-					name='browser_close_tab',
-					description='Close a tab',
-					inputSchema={
-						'type': 'object',
-						'properties': {'tab_id': {'type': 'string', 'description': '4 Character Tab ID of the tab to close'}},
-						'required': ['tab_id'],
-					},
-				),
-				# types.Tool(
-				# 	name="browser_close",
-				# 	description="Close the browser session",
-				# 	inputSchema={
-				# 		"type": "object",
-				# 		"properties": {}
-				# 	}
-				# ),
-				# types.Tool(
-				# 	name='retry_with_browser_use_agent',
-				# 	description='Retry a task using the browser-use agent. Only use this as a last resort if you fail to interact with a page multiple times.',
-				# 	inputSchema={
-				# 		'type': 'object',
-				# 		'properties': {
-				# 			'task': {
-				# 				'type': 'string',
-				# 				'description': 'The high-level goal and detailed step-by-step description of the task the AI browser agent needs to attempt, along with any relevant data needed to complete the task and info about previous attempts.',
-				# 			},
-				# 			'max_steps': {
-				# 				'type': 'integer',
-				# 				'description': 'Maximum number of steps an agent can take.',
-				# 				'default': 100,
-				# 			},
-				# 			'model': {
-				# 				'type': 'string',
-				# 				'description': 'LLM model to use (e.g., gpt-4o, claude-3-opus-20240229)',
-				# 				'default': 'gpt-4o',
-				# 			},
-				# 			'allowed_domains': {
-				# 				'type': 'array',
-				# 				'items': {'type': 'string'},
-				# 				'description': 'List of domains the agent is allowed to visit (security feature)',
-				# 				'default': [],
-				# 			},
-				# 			'use_vision': {
-				# 				'type': 'boolean',
-				# 				'description': 'Whether to use vision capabilities (screenshots) for the agent',
-				# 				'default': True,
-				# 			},
-				# 		},
-				# 		'required': ['task'],
-				# 	},
-				# ),
-				# Browser session management tools
-				types.Tool(
-					name='browser_list_sessions',
+					name='list_sessions',
 					description='List all active browser sessions with their details and last activity time',
 					inputSchema={'type': 'object', 'properties': {}},
 				),
 				types.Tool(
-					name='browser_close_session',
+					name='close_session',
 					description='Close a specific browser session by its ID',
 					inputSchema={
 						'type': 'object',
 						'properties': {
 							'session_id': {
 								'type': 'string',
-								'description': 'The browser session ID to close (get from browser_list_sessions)',
+								'description': 'The browser session ID to close (get from list_sessions)',
 							}
 						},
 						'required': ['session_id'],
 					},
 				),
 				types.Tool(
-					name='browser_close_all',
+					name='close_all_sessions',
 					description='Close all active browser sessions and clean up resources',
 					inputSchema={'type': 'object', 'properties': {}},
 				),
-			]
+			])
+			return tools
 
 		@self.server.list_resources()
 		async def handle_list_resources() -> list[types.Resource]:
@@ -480,79 +302,47 @@ class BrowserUseServer:
 				)
 
 	async def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
-		"""Execute a browser-use tool."""
+		"""Execute a browser-use tool - delegates to agent Tools for same behavior as agent."""
 
-		# Agent-based tools
-		if tool_name == 'retry_with_browser_use_agent':
-			return await self._retry_with_browser_use_agent(
-				task=arguments['task'],
-				max_steps=arguments.get('max_steps', 100),
-				model=arguments.get('model', 'gpt-4o'),
-				allowed_domains=arguments.get('allowed_domains', []),
-				use_vision=arguments.get('use_vision', True),
-			)
+		# MCP-specific: get_state (agent gets this automatically each step)
+		if tool_name == 'get_state':
+			return await self._get_browser_state(arguments.get('include_screenshot', False))
 
-		# Browser session management tools (don't require active session)
-		if tool_name == 'browser_list_sessions':
+		# Session management (MCP-specific)
+		if tool_name == 'list_sessions':
 			return await self._list_sessions()
-
-		elif tool_name == 'browser_close_session':
+		if tool_name == 'close_session':
 			return await self._close_session(arguments['session_id'])
-
-		elif tool_name == 'browser_close_all':
+		if tool_name == 'close_all_sessions':
 			return await self._close_all_sessions()
 
-		# Direct browser control tools (require active session)
-		elif tool_name.startswith('browser_'):
-			# Ensure browser session exists
-			if not self.browser_session:
-				await self._init_browser_session()
+		# Agent actions - delegate to Tools.registry.execute_action
+		if tool_name not in self.agent_tools_instance.registry.registry.actions:
+			return f'Unknown tool: {tool_name}'
 
-			if tool_name == 'browser_navigate':
-				return await self._navigate(arguments['url'], arguments.get('new_tab', False))
+		# Init browser for actions that need it
+		if tool_name not in NO_BROWSER_ACTIONS and not self.browser_session:
+			await self._init_browser_session()
 
-			elif tool_name == 'browser_click':
-				return await self._click(
-					index=arguments.get('index'),
-					coordinate_x=arguments.get('coordinate_x'),
-					coordinate_y=arguments.get('coordinate_y'),
-					new_tab=arguments.get('new_tab', False),
-				)
+		try:
+			result = await self.agent_tools_instance.registry.execute_action(
+				action_name=tool_name,
+				params=arguments,
+				browser_session=self.browser_session,
+				page_extraction_llm=self.llm,
+				file_system=self.file_system,
+				available_file_paths=[],
+			)
+		except Exception as e:
+			return f'Error: {str(e)}'
 
-			elif tool_name == 'browser_type':
-				return await self._type_text(arguments['index'], arguments['text'])
-
-			elif tool_name == 'browser_get_state':
-				return await self._get_browser_state(arguments.get('include_screenshot', False))
-
-			elif tool_name == 'browser_get_html':
-				return await self._get_html(arguments.get('selector'))
-
-			elif tool_name == 'browser_screenshot':
-				return await self._screenshot(arguments.get('full_page', False))
-
-			elif tool_name == 'browser_extract_content':
-				return await self._extract_content(arguments['query'], arguments.get('extract_links', False))
-
-			elif tool_name == 'browser_scroll':
-				return await self._scroll(arguments.get('direction', 'down'))
-
-			elif tool_name == 'browser_go_back':
-				return await self._go_back()
-
-			elif tool_name == 'browser_close':
-				return await self._close_browser()
-
-			elif tool_name == 'browser_list_tabs':
-				return await self._list_tabs()
-
-			elif tool_name == 'browser_switch_tab':
-				return await self._switch_tab(arguments['tab_id'])
-
-			elif tool_name == 'browser_close_tab':
-				return await self._close_tab(arguments['tab_id'])
-
-		return f'Unknown tool: {tool_name}'
+		if result is None:
+			return 'Done'
+		if hasattr(result, 'extracted_content') and result.extracted_content:
+			return result.extracted_content
+		if hasattr(result, 'error') and result.error:
+			return f'Error: {result.error}'
+		return 'Done'
 
 	async def _init_browser_session(self, allowed_domains: list[str] | None = None, **kwargs):
 		"""Initialize browser session using config"""
@@ -597,9 +387,6 @@ class BrowserUseServer:
 		# Track the session for management
 		self._track_session(self.browser_session)
 
-		# Create tools for direct actions
-		self.tools = Tools()
-
 		# Initialize LLM from config
 		llm_config = get_default_llm(self.config)
 		base_url = llm_config.get('base_url', None)
@@ -620,468 +407,44 @@ class BrowserUseServer:
 
 		logger.debug('Browser session initialized')
 
-	async def _retry_with_browser_use_agent(
-		self,
-		task: str,
-		max_steps: int = 100,
-		model: str = 'gpt-4o',
-		allowed_domains: list[str] | None = None,
-		use_vision: bool = True,
-	) -> str:
-		"""Run an autonomous agent task."""
-		logger.debug(f'Running agent task: {task}')
-
-		# Get LLM config
-		llm_config = get_default_llm(self.config)
-
-		# Get LLM provider
-		model_provider = llm_config.get('model_provider') or os.getenv('MODEL_PROVIDER')
-
-		# 如果model_provider不等于空，且等Bedrock
-		if model_provider and model_provider.lower() == 'bedrock':
-			llm_model = llm_config.get('model') or os.getenv('MODEL') or 'us.anthropic.claude-sonnet-4-20250514-v1:0'
-			aws_region = llm_config.get('region') or os.getenv('REGION')
-			if not aws_region:
-				aws_region = 'us-east-1'
-			llm = ChatAWSBedrock(
-				model=llm_model,  # or any Bedrock model
-				aws_region=aws_region,
-				aws_sso_auth=True,
-			)
-		else:
-			api_key = llm_config.get('api_key') or os.getenv('OPENAI_API_KEY')
-			if not api_key:
-				return 'Error: OPENAI_API_KEY not set in config or environment'
-
-			# Override model if provided in tool call
-			if model != llm_config.get('model', 'gpt-4o'):
-				llm_model = model
-			else:
-				llm_model = llm_config.get('model', 'gpt-4o')
-
-			base_url = llm_config.get('base_url', None)
-			kwargs = {}
-			if base_url:
-				kwargs['base_url'] = base_url
-			llm = ChatOpenAI(
-				model=llm_model,
-				api_key=api_key,
-				temperature=llm_config.get('temperature', 0.7),
-				**kwargs,
-			)
-
-		# Get profile config and merge with tool parameters
-		profile_config = get_default_profile(self.config)
-
-		# Override allowed_domains if provided in tool call
-		if allowed_domains is not None:
-			profile_config['allowed_domains'] = allowed_domains
-
-		# Create browser profile using config
-		profile = BrowserProfile(**profile_config)
-
-		# Create and run agent
-		agent = Agent(
-			task=task,
-			llm=llm,
-			browser_profile=profile,
-			use_vision=use_vision,
-		)
-
-		try:
-			history = await agent.run(max_steps=max_steps)
-
-			# Format results
-			results = []
-			results.append(f'Task completed in {len(history.history)} steps')
-			results.append(f'Success: {history.is_successful()}')
-
-			# Get final result if available
-			final_result = history.final_result()
-			if final_result:
-				results.append(f'\nFinal result:\n{final_result}')
-
-			# Include any errors
-			errors = history.errors()
-			if errors:
-				results.append(f'\nErrors encountered:\n{json.dumps(errors, indent=2)}')
-
-			# Include URLs visited
-			urls = history.urls()
-			if urls:
-				# Filter out None values and convert to strings
-				valid_urls = [str(url) for url in urls if url is not None]
-				if valid_urls:
-					results.append(f'\nURLs visited: {", ".join(valid_urls)}')
-
-			return '\n'.join(results)
-
-		except Exception as e:
-			logger.error(f'Agent task failed: {e}', exc_info=True)
-			return f'Agent task failed: {str(e)}'
-		finally:
-			# Clean up
-			await agent.close()
-
-	async def _navigate(self, url: str, new_tab: bool = False) -> str:
-		"""Navigate to a URL."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		# Update session activity
-		self._update_session_activity(self.browser_session.id)
-
-		from browser_use.browser.events import NavigateToUrlEvent
-
-		if new_tab:
-			event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=url, new_tab=True))
-			await event
-			return f'Opened new tab with URL: {url}'
-		else:
-			event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=url))
-			await event
-			return f'Navigated to: {url}'
-
-	async def _click(
-		self,
-		index: int | None = None,
-		coordinate_x: int | None = None,
-		coordinate_y: int | None = None,
-		new_tab: bool = False,
-	) -> str:
-		"""Click an element by index or at viewport coordinates."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		# Update session activity
-		self._update_session_activity(self.browser_session.id)
-
-		# Coordinate-based clicking
-		if coordinate_x is not None and coordinate_y is not None:
-			from browser_use.browser.events import ClickCoordinateEvent
-		
-			event = self.browser_session.event_bus.dispatch(
-				ClickCoordinateEvent(coordinate_x=coordinate_x, coordinate_y=coordinate_y)
-			)
-			await event
-			return f'Clicked at coordinates ({coordinate_x}, {coordinate_y})'
-
-		# Index-based clicking
-		if index is None:
-			return 'Error: Provide either index or both coordinate_x and coordinate_y'
-
-		# Get the element
-		element = await self.browser_session.get_dom_element_by_index(index)
-		if not element:
-			return f'Element with index {index} not found'
-
-		if new_tab:
-			# For links, extract href and open in new tab
-			href = element.attributes.get('href')
-			if href:
-				# Convert relative href to absolute URL
-				state = await self.browser_session.get_browser_state_summary()
-				current_url = state.url
-				if href.startswith('/'):
-					# Relative URL - construct full URL
-					from urllib.parse import urlparse
-
-					parsed = urlparse(current_url)
-					full_url = f'{parsed.scheme}://{parsed.netloc}{href}'
-				else:
-					full_url = href
-
-				# Open link in new tab
-				from browser_use.browser.events import NavigateToUrlEvent
-
-				event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=full_url, new_tab=True))
-				await event
-				return f'Clicked element {index} and opened in new tab {full_url[:20]}...'
-			else:
-				# For non-link elements, just do a normal click
-				from browser_use.browser.events import ClickElementEvent
-
-				event = self.browser_session.event_bus.dispatch(ClickElementEvent(node=element))
-				await event
-				return f'Clicked element {index} (new tab not supported for non-link elements)'
-		else:
-			# Normal click
-			from browser_use.browser.events import ClickElementEvent
-
-			event = self.browser_session.event_bus.dispatch(ClickElementEvent(node=element))
-			await event
-			return f'Clicked element {index}'
-
-	async def _type_text(self, index: int, text: str) -> str:
-		"""Type text into an element."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		element = await self.browser_session.get_dom_element_by_index(index)
-		if not element:
-			return f'Element with index {index} not found'
-
-		from browser_use.browser.events import TypeTextEvent
-
-		# Conservative heuristic to detect potentially sensitive data
-		# Only flag very obvious patterns to minimize false positives
-		is_potentially_sensitive = len(text) >= 6 and (
-			# Email pattern: contains @ and a domain-like suffix
-			('@' in text and '.' in text.split('@')[-1] if '@' in text else False)
-			# Mixed alphanumeric with reasonable complexity (likely API keys/tokens)
-			or (
-				len(text) >= 16
-				and any(char.isdigit() for char in text)
-				and any(char.isalpha() for char in text)
-				and any(char in '.-_' for char in text)
-			)
-		)
-
-		# Use generic key names to avoid information leakage about detection patterns
-		sensitive_key_name = None
-		if is_potentially_sensitive:
-			if '@' in text and '.' in text.split('@')[-1]:
-				sensitive_key_name = 'email'
-			else:
-				sensitive_key_name = 'credential'
-
-		event = self.browser_session.event_bus.dispatch(
-			TypeTextEvent(node=element, text=text, is_sensitive=is_potentially_sensitive, sensitive_key_name=sensitive_key_name)
-		)
-		await event
-
-		if is_potentially_sensitive:
-			if sensitive_key_name:
-				return f'Typed <{sensitive_key_name}> into element {index}'
-			else:
-				return f'Typed <sensitive> into element {index}'
-		else:
-			return f"Typed '{text}' into element {index}"
-
 	async def _get_browser_state(self, include_screenshot: bool = False) -> str:
-		"""Get current browser state."""
+		"""Get browser state - same format as agent receives each step."""
 		if not self.browser_session:
-			return 'Error: No browser session active'
+			return 'Error: No browser session active. Call navigate or another browser action first.'
 
-		state = await self.browser_session.get_browser_state_summary()
-
+		state = await self.browser_session.get_browser_state_summary(include_screenshot=include_screenshot)
 		result: dict[str, Any] = {
 			'url': state.url,
 			'title': state.title,
-			'tabs': [{'url': tab.url, 'title': tab.title} for tab in state.tabs],
+			'tabs': [{'tab_id': tab.target_id[-4:], 'url': tab.url, 'title': tab.title or ''} for tab in state.tabs],
 			'interactive_elements': [],
 		}
-
-		# Add viewport info so the LLM knows the coordinate space
 		if state.page_info:
 			pi = state.page_info
-			result['viewport'] = {
-				'width': pi.viewport_width,
-				'height': pi.viewport_height,
-			}
-			result['page'] = {
-				'width': pi.page_width,
-				'height': pi.page_height,
-			}
-			result['scroll'] = {
-				'x': pi.scroll_x,
-				'y': pi.scroll_y,
-			}
-
-		# Add interactive elements with their indices
+			result['viewport'] = {'width': pi.viewport_width, 'height': pi.viewport_height}
+			result['page'] = {'width': pi.page_width, 'height': pi.page_height}
+			result['scroll'] = {'x': pi.scroll_x, 'y': pi.scroll_y}
 		for index, element in state.dom_state.selector_map.items():
 			elem_info: dict[str, Any] = {
 				'index': index,
 				'tag': element.tag_name,
 				'text': element.get_all_children_text(max_depth=2)[:100],
 			}
+			if element.attributes.get('id'):
+				elem_info['id'] = element.attributes['id']
 			if element.attributes.get('placeholder'):
 				elem_info['placeholder'] = element.attributes['placeholder']
 			if element.attributes.get('href'):
 				elem_info['href'] = element.attributes['href']
 			result['interactive_elements'].append(elem_info)
-
 		if include_screenshot and state.screenshot:
 			result['screenshot'] = state.screenshot
-			# Include viewport dimensions with screenshot so LLM can map pixels to coordinates
 			if state.page_info:
 				result['screenshot_dimensions'] = {
 					'width': state.page_info.viewport_width,
 					'height': state.page_info.viewport_height,
 				}
-
 		return json.dumps(result, indent=2)
-
-	async def _get_html(self, selector: str | None = None) -> str:
-		"""Get raw HTML of the page or a specific element."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		self._update_session_activity(self.browser_session.id)
-
-		cdp_session = await self.browser_session.get_or_create_cdp_session(target_id=None, focus=False)
-		if not cdp_session:
-			return 'Error: No active CDP session'
-
-		if selector:
-			js = (
-				f'(function(){{ const el = document.querySelector({json.dumps(selector)}); return el ? el.outerHTML : null; }})()'
-			)
-		else:
-			js = 'document.documentElement.outerHTML'
-
-		result = await cdp_session.cdp_client.send.Runtime.evaluate(
-			params={'expression': js, 'returnByValue': True},
-			session_id=cdp_session.session_id,
-		)
-		html = result.get('result', {}).get('value')
-		if html is None:
-			return f'No element found for selector: {selector}' if selector else 'Error: Could not get page HTML'
-		return html
-
-	async def _screenshot(self, full_page: bool = False) -> str:
-		"""Take a screenshot and return base64 with dimensions."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		import base64
-
-		self._update_session_activity(self.browser_session.id)
-
-		data = await self.browser_session.take_screenshot(full_page=full_page)
-		b64 = base64.b64encode(data).decode()
-
-		# Get viewport dimensions
-		state = await self.browser_session.get_browser_state_summary()
-		result: dict[str, Any] = {
-			'screenshot': b64,
-			'size_bytes': len(data),
-		}
-		if state.page_info:
-			result['viewport'] = {
-				'width': state.page_info.viewport_width,
-				'height': state.page_info.viewport_height,
-			}
-		return json.dumps(result)
-
-	async def _extract_content(self, query: str, extract_links: bool = False) -> str:
-		"""Extract content from current page."""
-		if not self.llm:
-			return 'Error: LLM not initialized (set OPENAI_API_KEY)'
-
-		if not self.file_system:
-			return 'Error: FileSystem not initialized'
-
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		if not self.tools:
-			return 'Error: Tools not initialized'
-
-		state = await self.browser_session.get_browser_state_summary()
-
-		# Use the extract action
-		# Create a dynamic action model that matches the tools's expectations
-		from pydantic import create_model
-
-		# Create action model dynamically
-		ExtractAction = create_model(
-			'ExtractAction',
-			__base__=ActionModel,
-			extract=dict[str, Any],
-		)
-
-		# Use model_validate because Pyright does not understand the dynamic model
-		action = ExtractAction.model_validate(
-			{
-				'extract': {'query': query, 'extract_links': extract_links},
-			}
-		)
-		action_result = await self.tools.act(
-			action=action,
-			browser_session=self.browser_session,
-			page_extraction_llm=self.llm,
-			file_system=self.file_system,
-		)
-
-		return action_result.extracted_content or 'No content extracted'
-
-	async def _scroll(self, direction: str = 'down') -> str:
-		"""Scroll the page."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		from browser_use.browser.events import ScrollEvent
-
-		# Scroll by a standard amount (500 pixels)
-		event = self.browser_session.event_bus.dispatch(
-			ScrollEvent(
-				direction=direction,  # type: ignore
-				amount=500,
-			)
-		)
-		await event
-		return f'Scrolled {direction}'
-
-	async def _go_back(self) -> str:
-		"""Go back in browser history."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		from browser_use.browser.events import GoBackEvent
-
-		event = self.browser_session.event_bus.dispatch(GoBackEvent())
-		await event
-		return 'Navigated back'
-
-	async def _close_browser(self) -> str:
-		"""Close the browser session."""
-		if self.browser_session:
-			from browser_use.browser.events import BrowserStopEvent
-
-			event = self.browser_session.event_bus.dispatch(BrowserStopEvent())
-			await event
-			self.browser_session = None
-			self.tools = None
-			return 'Browser closed'
-		return 'No browser session to close'
-
-	async def _list_tabs(self) -> str:
-		"""List all open tabs."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		tabs_info = await self.browser_session.get_tabs()
-		tabs = []
-		for i, tab in enumerate(tabs_info):
-			tabs.append({'tab_id': tab.target_id[-4:], 'url': tab.url, 'title': tab.title or ''})
-		return json.dumps(tabs, indent=2)
-
-	async def _switch_tab(self, tab_id: str) -> str:
-		"""Switch to a different tab."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		from browser_use.browser.events import SwitchTabEvent
-
-		target_id = await self.browser_session.get_target_id_from_tab_id(tab_id)
-		event = self.browser_session.event_bus.dispatch(SwitchTabEvent(target_id=target_id))
-		await event
-		state = await self.browser_session.get_browser_state_summary()
-		return f'Switched to tab {tab_id}: {state.url}'
-
-	async def _close_tab(self, tab_id: str) -> str:
-		"""Close a specific tab."""
-		if not self.browser_session:
-			return 'Error: No browser session active'
-
-		from browser_use.browser.events import CloseTabEvent
-
-		target_id = await self.browser_session.get_target_id_from_tab_id(tab_id)
-		event = self.browser_session.event_bus.dispatch(CloseTabEvent(target_id=target_id))
-		await event
-		current_url = await self.browser_session.get_current_page_url()
-		return f'Closed tab # {tab_id}, now on {current_url}'
 
 	def _track_session(self, session: BrowserSession) -> None:
 		"""Track a browser session for management."""
@@ -1145,7 +508,6 @@ class BrowserUseServer:
 			# If this was the current session, clear it
 			if self.browser_session and self.browser_session.id == session_id:
 				self.browser_session = None
-				self.tools = None
 
 			return f'Successfully closed session {session_id}'
 		except Exception as e:
@@ -1171,7 +533,6 @@ class BrowserUseServer:
 
 		# Clear current session references
 		self.browser_session = None
-		self.tools = None
 
 		result = f'Closed {closed_count} sessions'
 		if errors:
