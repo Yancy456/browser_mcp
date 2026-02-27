@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import anyio
 
@@ -44,6 +44,7 @@ from browser_use.tools.views import (
 	ExtractAction,
 	FindElementsAction,
 	GetDropdownOptionsAction,
+	GetStateAction,
 	InputTextAction,
 	NavigateAction,
 	NoParamsAction,
@@ -465,6 +466,68 @@ class Tools(Generic[Context]):
 				logger.error(f'Failed to dispatch GoBackEvent: {type(e).__name__}: {e}')
 				error_msg = f'Failed to go back: {str(e)}'
 				return ActionResult(error=error_msg)
+
+		@self.registry.action(
+			'Get current browser state (URL, title, tabs, interactive elements). Equivalent to what agent receives each step.',
+			param_model=GetStateAction,
+		)
+		async def get_state(params: GetStateAction, browser_session: BrowserSession):
+			"""Get browser state - same format as agent receives each step."""
+			try:
+				state = await browser_session.get_browser_state_summary(include_screenshot=params.include_screenshot)
+				result: dict[str, Any] = {
+					'url': state.url,
+					'title': state.title,
+					'tabs': [{'tab_id': tab.target_id[-4:], 'url': tab.url, 'title': tab.title or ''} for tab in state.tabs],
+					'interactive_elements': [],
+				}
+				if state.page_info:
+					pi = state.page_info
+					result['viewport'] = {'width': pi.viewport_width, 'height': pi.viewport_height}
+					result['page'] = {'width': pi.page_width, 'height': pi.page_height}
+					result['scroll'] = {'x': pi.scroll_x, 'y': pi.scroll_y}
+				for index, element in state.dom_state.selector_map.items():
+					elem_info: dict[str, Any] = {
+						'index': index,
+						'tag': element.tag_name,
+						'text': element.get_all_children_text(max_depth=2)[:100],
+					}
+					if element.attributes.get('id'):
+						elem_info['id'] = element.attributes['id']
+					if element.attributes.get('placeholder'):
+						elem_info['placeholder'] = element.attributes['placeholder']
+					if element.attributes.get('href'):
+						elem_info['href'] = element.attributes['href']
+					result['interactive_elements'].append(elem_info)
+				if params.include_screenshot and state.screenshot:
+					result['screenshot'] = state.screenshot
+					if state.page_info:
+						result['screenshot_dimensions'] = {
+							'width': state.page_info.viewport_width,
+							'height': state.page_info.viewport_height,
+						}
+				return ActionResult(extracted_content=json.dumps(result, indent=2))
+			except Exception as e:
+				return ActionResult(error=f'Failed to get state: {str(e)}')
+
+		@self.registry.action('Get full visible text content of the current page (document.body.innerText)', param_model=NoParamsAction)
+		async def get_page_text(_: NoParamsAction, browser_session: BrowserSession):
+			"""Get full visible text content of the current page."""
+			try:
+				cdp_session = await browser_session.get_or_create_cdp_session(target_id=None)
+				result = await cdp_session.cdp_client.send.Runtime.evaluate(
+					params={
+						'expression': "(function(){ try { return document.body ? document.body.innerText : ''; } catch(e) { return 'Error: ' + e.message; } })()",
+						'returnByValue': True,
+					},
+					session_id=cdp_session.session_id,
+				)
+				if result and 'result' in result and 'value' in result['result']:
+					text = result['result']['value'] or ''
+					return ActionResult(extracted_content=text)
+				return ActionResult(extracted_content='')
+			except Exception as e:
+				return ActionResult(error=f'Failed to get page text: {str(e)}')
 
 		@self.registry.action('Wait for x seconds.')
 		async def wait(seconds: int = 3):

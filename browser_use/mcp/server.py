@@ -214,57 +214,11 @@ class BrowserUseServer:
 
 		@self.server.list_tools()
 		async def handle_list_tools() -> list[types.Tool]:
-			"""List all available browser-use tools - same as agent actions plus session management."""
-			tools = [
+			"""List all available browser-use tools - same as agent actions."""
+			return [
 				types.Tool(name=t['name'], description=t['description'], inputSchema=t['inputSchema'])
 				for t in self._agent_tools_list
 			]
-			# MCP-specific: get_state (agent gets this automatically each step)
-			tools.insert(
-				0,
-				types.Tool(
-					name='get_state',
-					description='Get current browser state (URL, title, tabs, interactive elements). Equivalent to what agent receives each step.',
-					inputSchema={
-						'type': 'object',
-						'properties': {
-							'include_screenshot': {
-								'type': 'boolean',
-								'description': 'Whether to include a screenshot',
-								'default': False,
-							},
-						},
-					},
-				),
-			)
-			# Session management (MCP-specific)
-			tools.extend([
-				# types.Tool(
-				# 	name='list_sessions',
-				# 	description='List all active browser sessions with their details and last activity time',
-				# 	inputSchema={'type': 'object', 'properties': {}},
-				# ),
-				# types.Tool(
-				# 	name='close_session',
-				# 	description='Close a specific browser session by its ID',
-				# 	inputSchema={
-				# 		'type': 'object',
-				# 		'properties': {
-				# 			'session_id': {
-				# 				'type': 'string',
-				# 				'description': 'The browser session ID to close (get from list_sessions)',
-				# 			}
-				# 		},
-				# 		'required': ['session_id'],
-				# 	},
-				# ),
-				# types.Tool(
-				# 	name='close_all_sessions',
-				# 	description='Close all active browser sessions and clean up resources',
-				# 	inputSchema={'type': 'object', 'properties': {}},
-				# ),
-			])
-			return tools
 
 		@self.server.list_resources()
 		async def handle_list_resources() -> list[types.Resource]:
@@ -303,18 +257,6 @@ class BrowserUseServer:
 
 	async def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
 		"""Execute a browser-use tool - delegates to agent Tools for same behavior as agent."""
-
-		# MCP-specific: get_state (agent gets this automatically each step)
-		if tool_name == 'get_state':
-			return await self._get_browser_state(arguments.get('include_screenshot', False))
-
-		# Session management (MCP-specific)
-		if tool_name == 'list_sessions':
-			return await self._list_sessions()
-		if tool_name == 'close_session':
-			return await self._close_session(arguments['session_id'])
-		if tool_name == 'close_all_sessions':
-			return await self._close_all_sessions()
 
 		# Agent actions - delegate to Tools.registry.execute_action
 		if tool_name not in self.agent_tools_instance.registry.registry.actions:
@@ -406,45 +348,6 @@ class BrowserUseServer:
 		self.file_system = FileSystem(base_dir=Path(file_system_path).expanduser())
 
 		logger.debug('Browser session initialized')
-
-	async def _get_browser_state(self, include_screenshot: bool = False) -> str:
-		"""Get browser state - same format as agent receives each step."""
-		if not self.browser_session:
-			return 'Error: No browser session active. Call navigate or another browser action first.'
-
-		state = await self.browser_session.get_browser_state_summary(include_screenshot=include_screenshot)
-		result: dict[str, Any] = {
-			'url': state.url,
-			'title': state.title,
-			'tabs': [{'tab_id': tab.target_id[-4:], 'url': tab.url, 'title': tab.title or ''} for tab in state.tabs],
-			'interactive_elements': [],
-		}
-		if state.page_info:
-			pi = state.page_info
-			result['viewport'] = {'width': pi.viewport_width, 'height': pi.viewport_height}
-			result['page'] = {'width': pi.page_width, 'height': pi.page_height}
-			result['scroll'] = {'x': pi.scroll_x, 'y': pi.scroll_y}
-		for index, element in state.dom_state.selector_map.items():
-			elem_info: dict[str, Any] = {
-				'index': index,
-				'tag': element.tag_name,
-				'text': element.get_all_children_text(max_depth=2)[:100],
-			}
-			if element.attributes.get('id'):
-				elem_info['id'] = element.attributes['id']
-			if element.attributes.get('placeholder'):
-				elem_info['placeholder'] = element.attributes['placeholder']
-			if element.attributes.get('href'):
-				elem_info['href'] = element.attributes['href']
-			result['interactive_elements'].append(elem_info)
-		if include_screenshot and state.screenshot:
-			result['screenshot'] = state.screenshot
-			if state.page_info:
-				result['screenshot_dimensions'] = {
-					'width': state.page_info.viewport_width,
-					'height': state.page_info.viewport_height,
-				}
-		return json.dumps(result, indent=2)
 
 	def _track_session(self, session: BrowserSession) -> None:
 		"""Track a browser session for management."""

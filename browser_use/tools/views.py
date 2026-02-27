@@ -166,6 +166,12 @@ class ReadContentAction(BaseModel):
 	context: str = Field(default='', description='Additional context about the task')
 
 
+class GetStateAction(BaseModel):
+	include_screenshot: bool = Field(
+		default=False, description='Whether to include a screenshot in the state'
+	)
+
+
 class GetDropdownOptionsAction(BaseModel):
 	index: int
 

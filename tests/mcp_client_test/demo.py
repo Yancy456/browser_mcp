@@ -63,7 +63,7 @@ async def demo_browser_interactions():
 		tools = tools_result.get("tools", []) if isinstance(tools_result, dict) else []
 		print(f"   Found {len(tools)} tools")
 		tool_names = [t.get("name", "?") for t in tools]
-		print(f"   Tools: {', '.join(tool_names)}...")
+		print(f"   Tools: {', '.join(tool_names)}")
 
 		# 2. Navigate
 		print("\n2. Navigating to quotes.toscrape.com...")
@@ -90,10 +90,28 @@ async def demo_browser_interactions():
 			print(f"   Title: {parsed.get('title', '?')}")
 			print(f"   Interactive elements: {len(parsed.get('interactive_elements', []))}")
 
-		# 4. Find Login and click
+		# 4. Get full page text content
+		print("\n4. Getting full page text content...")
+		page_text_result = await client.call_tool(
+			server_name="browser-use",
+			tool_name="get_page_text",
+			arguments={},
+		)
+		page_text = _extract_text_from_result(page_text_result)
+		if page_text:
+			preview = page_text[:500] + "..." if len(page_text) > 500 else page_text
+			print(f"   Page text ({len(page_text)} chars): {preview!r}")
+			# Save full text to file
+			output_dir = Path(__file__).parent
+			(output_dir / "demo_page_text.txt").write_text(page_text, encoding="utf-8")
+			print(f"   Saved full text to {output_dir}/demo_page_text.txt")
+		else:
+			print(f"   Result: {page_text_result}")
+
+		# 5. Find Login and click
 		click_index = _find_element_index_by_text(state_text, "Login") if state_text else None
 		if click_index is not None:
-			print(f"\n4. Clicking Login (index={click_index})...")
+			print(f"\n5. Clicking Login (index={click_index})...")
 			click_result = await client.call_tool(
 				server_name="browser-use",
 				tool_name="click",
@@ -102,9 +120,9 @@ async def demo_browser_interactions():
 			click_text = _extract_text_from_result(click_result)
 			print(f"   Result: {click_text or click_result}")
 		else:
-			print("\n4. No matching element found, skipping click step.")
+			print("\n5. No matching element found, skipping click step.")
 
-		# # 5. Find input and type (optional)
+		# # 6. Find input and type (optional)
 		# input_index = _find_input_index(state_text) if state_text else None
 		# if input_index is not None:
 		# 	print(f"\n5. Typing into input element (index={input_index})...")
@@ -118,7 +136,7 @@ async def demo_browser_interactions():
 		# else:
 		# 	print("\n5. No input/textarea found, skipping input step.")
 
-		# # 6. Save results
+		# # 7. Save results
 		output_dir = Path(__file__).parent
 		with open(output_dir / "demo_result.json", "w", encoding="utf-8") as f:
 			json.dump(state_result, f, ensure_ascii=False, indent=2)
@@ -129,7 +147,7 @@ async def demo_browser_interactions():
 					json.dump(parsed_state, f, ensure_ascii=False, indent=2)
 			except json.JSONDecodeError:
 				pass
-		print(f"\n6. Saved results to {output_dir}/demo_result.json")
+		print(f"\n7. Saved results to {output_dir}/demo_result.json")
 
 	except Exception as e:
 		print(f"\nError: {e}")

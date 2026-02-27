@@ -1,3 +1,15 @@
+# browser-use
+
+This project is a fork of [browser-use](https://github.com/browser-use/browser-use) with extended MCP (Model Context Protocol) support.
+
+## What's Changed
+
+- **MCP Server**: Run as an MCP server via `uvx browser-use --mcp` to expose browser automation tools to MCP clients (e.g. Claude Desktop, Cursor).
+- **MCP Tools**: Agent actions (navigate, click, input, scroll, etc.) are exposed as MCP tools with the same names and schemas, so MCP clients can drive the browser directly.
+- **MCP Client Integration**: Connect to external MCP servers and register their tools as browser-use actions via `MCPClient` and `MCPToolWrapper`.
+
+---
+
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/2ccdb752-22fb-41c7-8948-857fc1ad7e24"">
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/774a46d5-27a0-490c-b7d0-e65fcbbfa358">

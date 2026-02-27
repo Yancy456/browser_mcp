@@ -11,7 +11,7 @@ NO_BROWSER_ACTIONS = {'wait', 'done', 'read_file', 'replace_file', 'write_file'}
 MCP_EXCLUDE_ACTIONS: list[str] = ['done', 'read_file', 'replace_file', 'write_file','search_page','search','find_text',
 'read_long_content','evaluate','list_sessions','close_session',
 'close_all_sessions','close_all_sessions','go_back','wait','upload_file',
-'save_as_pdf','dropdown_options','select_dropdown','screenshot','close','extract']
+'save_as_pdf','dropdown_options','select_dropdown','screenshot','close','extract','switch','find_elements','send_keys']
 
 
 def _build_mcp_schema(param_model: type) -> dict[str, Any]:
