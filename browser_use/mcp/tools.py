@@ -20,6 +20,40 @@ def _build_mcp_schema(param_model: type) -> dict[str, Any]:
 	return schema
 
 
+# MCP-specific tools (not agent actions) - session management
+MCP_SESSION_TOOLS: list[dict[str, Any]] = [
+	{
+		'name': 'list_sessions',
+		'description': 'List all active browser sessions with their details and last activity time',
+		'inputSchema': {'type': 'object', 'properties': {}},
+	},
+	{
+		'name': 'close_session',
+		'description': 'Close a specific browser session by its ID',
+		'inputSchema': {
+			'type': 'object',
+			'properties': {
+				'session_id': {
+					'type': 'string',
+					'description': 'The browser session ID to close (get from list_sessions)',
+				},
+			},
+			'required': ['session_id'],
+		},
+	},
+	{
+		'name': 'close_all_sessions',
+		'description': 'Close all active browser sessions and clean up resources',
+		'inputSchema': {'type': 'object', 'properties': {}},
+	},
+	{
+		'name': 'restart_browser',
+		'description': 'Restart the current browser session (close and reinitialize). Use when browser is unresponsive or needs a fresh state.',
+		'inputSchema': {'type': 'object', 'properties': {}},
+	},
+]
+
+
 def build_agent_tools() -> tuple[list[dict[str, Any]], Tools]:
 	"""Build MCP Tool list from agent Tools registry - same names and schemas as agent actions.
 
@@ -44,5 +78,14 @@ def build_agent_tools() -> tuple[list[dict[str, Any]], Tools]:
 				'inputSchema': schema,
 			}
 		)
+
+	# MCP-specific: get_state first (agent gets this automatically each step)
+	get_state_tool = next((t for t in mcp_tools if t['name'] == 'get_state'), None)
+	if get_state_tool:
+		mcp_tools.remove(get_state_tool)
+		mcp_tools.insert(0, get_state_tool)
+
+	# Session management (MCP-specific)
+	mcp_tools.extend(MCP_SESSION_TOOLS)
 
 	return mcp_tools, tools_instance

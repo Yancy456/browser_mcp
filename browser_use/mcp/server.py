@@ -258,6 +258,19 @@ class BrowserUseServer:
 	async def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
 		"""Execute a browser-use tool - delegates to agent Tools for same behavior as agent."""
 
+		# MCP-specific: session management (no browser required)
+		if tool_name == 'list_sessions':
+			return await self._list_sessions()
+		if tool_name == 'close_session':
+			session_id = arguments.get('session_id')
+			if not session_id:
+				return 'Error: session_id is required'
+			return await self._close_session(session_id)
+		if tool_name == 'close_all_sessions':
+			return await self._close_all_sessions()
+		if tool_name == 'restart_browser':
+			return await self._restart_browser()
+
 		# Agent actions - delegate to Tools.registry.execute_action
 		if tool_name not in self.agent_tools_instance.registry.registry.actions:
 			return f'Unknown tool: {tool_name}'
@@ -442,6 +455,23 @@ class BrowserUseServer:
 			result += f'. Errors: {"; ".join(errors)}'
 
 		return result
+
+	async def _restart_browser(self) -> str:
+		"""Restart the current browser session (close and reinitialize)."""
+		old_session = self.browser_session
+		if old_session:
+			session_id = old_session.id
+			# Clear refs first so _init_browser_session can proceed
+			self.active_sessions.pop(session_id, None)
+			self.browser_session = None
+			try:
+				await old_session.kill()
+			except Exception as e:
+				logger.debug(f'Error killing old session during restart: {e}')
+			await self._init_browser_session()
+			return f'Successfully restarted browser (was session {session_id})'
+		await self._init_browser_session()
+		return 'Browser session started (no previous session to restart)'
 
 	async def _cleanup_expired_sessions(self) -> None:
 		"""Background task to clean up expired sessions."""
