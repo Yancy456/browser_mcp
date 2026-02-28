@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from pytest_httpserver import HTTPServer
 
-from browser_use.agent.views import ActionResult
+from browser_use.tools.views import ActionResult
 from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.tools.service import Tools
 

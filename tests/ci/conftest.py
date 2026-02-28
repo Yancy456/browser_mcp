@@ -19,7 +19,6 @@ socketserver.ThreadingMixIn.block_on_close = False
 # Also set daemon threads to prevent hanging
 socketserver.ThreadingMixIn.daemon_threads = True
 
-from browser_use.agent.views import AgentOutput
 from browser_use.llm import BaseChatModel
 from browser_use.llm.views import ChatInvokeCompletion
 from browser_use.tools.service import Tools
@@ -33,7 +32,6 @@ os.environ['SKIP_LLM_API_KEY_VERIFICATION'] = 'true'
 
 from bubus import BaseEvent
 
-from browser_use import Agent
 from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.sync.service import CloudSync
 
@@ -74,84 +72,8 @@ def setup_test_environment():
 
 # not a fixture, mock_llm() provides this in a fixture below, this is a helper so that it can accept args
 def create_mock_llm(actions: list[str] | None = None) -> BaseChatModel:
-	"""Create a mock LLM that returns specified actions or a default done action.
-
-	Args:
-		actions: Optional list of JSON strings representing actions to return in sequence.
-			If not provided, returns a single done action.
-			After all actions are exhausted, returns a done action.
-
-	Returns:
-		Mock LLM that will return the actions in order, or just a done action if no actions provided.
-	"""
-	tools = Tools()
-	ActionModel = tools.registry.create_action_model()
-	AgentOutputWithActions = AgentOutput.type_with_custom_actions(ActionModel)
-
-	llm = AsyncMock(spec=BaseChatModel)
-	llm.model = 'mock-llm'
-	llm._verified_api_keys = True
-
-	# Add missing properties from BaseChatModel protocol
-	llm.provider = 'mock'
-	llm.name = 'mock-llm'
-	llm.model_name = 'mock-llm'  # Ensure this returns a string, not a mock
-
-	# Default done action
-	default_done_action = """
-	{
-		"thinking": "null",
-		"evaluation_previous_goal": "Successfully completed the task",
-		"memory": "Task completed",
-		"next_goal": "Task completed",
-		"action": [
-			{
-				"done": {
-					"text": "Task completed successfully",
-					"success": true
-				}
-			}
-		]
-	}
-	"""
-
-	# Unified logic for both cases
-	action_index = 0
-
-	def get_next_action() -> str:
-		nonlocal action_index
-		if actions is not None and action_index < len(actions):
-			action = actions[action_index]
-			action_index += 1
-			return action
-		else:
-			return default_done_action
-
-	async def mock_ainvoke(*args, **kwargs):
-		# Check if output_format is provided (2nd argument or in kwargs)
-		output_format = None
-		if len(args) >= 2:
-			output_format = args[1]
-		elif 'output_format' in kwargs:
-			output_format = kwargs['output_format']
-
-		action_json = get_next_action()
-
-		if output_format is None:
-			# Return string completion
-			return ChatInvokeCompletion(completion=action_json, usage=None)
-		else:
-			# Parse with provided output_format (could be AgentOutputWithActions or another model)
-			if output_format == AgentOutputWithActions:
-				parsed = AgentOutputWithActions.model_validate_json(action_json)
-			else:
-				# For other output formats, try to parse the JSON with that model
-				parsed = output_format.model_validate_json(action_json)
-			return ChatInvokeCompletion(completion=parsed, usage=None)
-
-	llm.ainvoke.side_effect = mock_ainvoke
-
-	return llm
+	"""Create a mock LLM. Agent has been removed - skips (tests using this need Agent)."""
+	pytest.skip('Agent has been removed - mock_llm requires AgentOutput')
 
 
 @pytest.fixture(scope='module')
@@ -203,13 +125,8 @@ def mock_llm():
 
 @pytest.fixture(scope='function')
 def agent_with_cloud(browser_session, mock_llm, cloud_sync):
-	"""Create agent (cloud_sync parameter removed)."""
-	agent = Agent(
-		task='Test task',
-		llm=mock_llm,
-		browser_session=browser_session,
-	)
-	return agent
+	"""Create agent. Agent has been removed - skips."""
+	pytest.skip('Agent has been removed')
 
 
 @pytest.fixture(scope='function')

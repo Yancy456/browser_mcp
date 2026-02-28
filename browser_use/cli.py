@@ -154,8 +154,7 @@ from browser_use.llm.openai.chat import ChatOpenAI
 
 load_dotenv()
 
-from browser_use import Agent, Controller
-from browser_use.agent.views import AgentSettings
+from browser_use import Controller
 from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.logging_config import addLoggingLevel
 from browser_use.telemetry import CLITelemetryEvent, ProductTelemetry
@@ -600,7 +599,7 @@ class BrowserUseApp(App):
 		self.config = config
 		self.browser_session: BrowserSession | None = None  # Will be set before app.run_async()
 		self.controller: Controller | None = None  # Will be set before app.run_async()
-		self.agent: Agent | None = None
+		self.agent: Any | None = None  # Agent has been removed
 		self.llm: Any | None = None  # Will be set before app.run_async()
 		self.task_history = config.get('command_history', [])
 		# Track current position in history for up/down navigation
@@ -1767,7 +1766,7 @@ async def run_auth_command():
 		# Create authentication flow with dummy task
 		from uuid_extensions import uuid7str
 
-		from browser_use.agent.cloud_events import (
+		from browser_use.sync.cloud_events import (
 			CreateAgentSessionEvent,
 			CreateAgentStepEvent,
 			CreateAgentTaskEvent,
@@ -1966,7 +1965,7 @@ async def run_auth_command():
 		# Still try to complete the task in UI with error message
 		if task_id and sync_service:
 			try:
-				from browser_use.agent.cloud_events import UpdateAgentTaskEvent
+				from browser_use.sync.cloud_events import UpdateAgentTaskEvent
 
 				completion_event = UpdateAgentTaskEvent(
 					id=task_id,
@@ -2061,11 +2060,8 @@ def run_main_interface(ctx: click.Context, debug: bool = False, **kwargs):
 
 	# Check if prompt mode is activated
 	if kwargs.get('prompt'):
-		# Set environment variable for prompt mode before running
-		os.environ['BROWSER_USE_LOGGING_LEVEL'] = 'result'
-		# Run in non-interactive mode
-		asyncio.run(run_prompt_mode(kwargs['prompt'], ctx, debug))
-		return
+		print('Agent has been removed from browser-use. Prompt mode is no longer available.', file=sys.stderr)
+		sys.exit(1)
 
 	# Configure console logging
 	console_handler = logging.StreamHandler(sys.stdout)
@@ -2076,7 +2072,12 @@ def run_main_interface(ctx: click.Context, debug: bool = False, **kwargs):
 	root_logger.setLevel(logging.INFO if not debug else logging.DEBUG)
 	root_logger.addHandler(console_handler)
 
-	logger = logging.getLogger('browser_use.startup')
+	# Agent TUI has been removed
+	print('Agent and TUI have been removed from browser-use.', file=sys.stderr)
+	print('Use the browser-use CLI for browser automation: uvx browser-use open <url>', file=sys.stderr)
+	sys.exit(1)
+
+	logger = logging.getLogger('browser_use.startup')  # noqa: F841
 	logger.info('Starting Browser-Use initialization')
 	if debug:
 		logger.debug(f'System info: Python {sys.version.split()[0]}, Platform: {sys.platform}')

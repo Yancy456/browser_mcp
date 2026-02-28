@@ -618,14 +618,6 @@ def _parse_with_type_annotation(data: Any, annotation: Any) -> Any:
 						field_annotation = field_info.annotation
 						parsed_fields[field_name] = _parse_with_type_annotation(data[field_name], field_annotation)
 				result = actual_class.model_construct(**parsed_fields)
-
-				# Special handling for AgentHistoryList: extract and set _output_model_schema from generic type parameter
-				if actual_class.__name__ == 'AgentHistoryList' and generic_args:
-					output_model_schema = generic_args[0]
-					# Only set if it's an actual model class, not a TypeVar
-					if inspect.isclass(output_model_schema) and hasattr(output_model_schema, 'model_validate_json'):
-						result._output_model_schema = output_model_schema
-
 				return result
 			# Fallback if model_fields not available
 			return actual_class.model_construct(**data)

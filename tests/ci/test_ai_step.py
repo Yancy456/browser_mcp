@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock
 
 from browser_use.agent.service import Agent
-from browser_use.agent.views import ActionResult
+from browser_use.tools.views import ActionResult
 from tests.ci.conftest import create_mock_llm
 
 

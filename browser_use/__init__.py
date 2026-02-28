@@ -45,11 +45,6 @@ base_subprocess.BaseSubprocessTransport.__del__ = _patched_del
 
 # Type stubs for lazy imports - fixes linter warnings
 if TYPE_CHECKING:
-	from browser_use.agent.prompts import SystemPrompt
-	from browser_use.agent.service import Agent
-
-	# from browser_use.agent.service import Agent
-	from browser_use.agent.views import ActionModel, ActionResult, AgentHistoryList
 	from browser_use.browser import BrowserProfile, BrowserSession
 	from browser_use.browser import BrowserSession as Browser
 	from browser_use.code_use.service import CodeAgent
@@ -70,17 +65,11 @@ if TYPE_CHECKING:
 
 	# Lazy imports mapping - only import when actually accessed
 _LAZY_IMPORTS = {
-	# Agent service (heavy due to dependencies)
-	# 'Agent': ('browser_use.agent.service', 'Agent'),
 	# Code-use agent (Jupyter notebook-like execution)
 	'CodeAgent': ('browser_use.code_use.service', 'CodeAgent'),
-	'Agent': ('browser_use.agent.service', 'Agent'),
-	# System prompt (moderate weight due to agent.views imports)
-	'SystemPrompt': ('browser_use.agent.prompts', 'SystemPrompt'),
-	# Agent views (very heavy - over 1 second!)
-	'ActionModel': ('browser_use.agent.views', 'ActionModel'),
-	'ActionResult': ('browser_use.agent.views', 'ActionResult'),
-	'AgentHistoryList': ('browser_use.agent.views', 'AgentHistoryList'),
+	# Tools views
+	'ActionModel': ('browser_use.tools.registry.views', 'ActionModel'),
+	'ActionResult': ('browser_use.tools.views', 'ActionResult'),
 	'BrowserSession': ('browser_use.browser', 'BrowserSession'),
 	'Browser': ('browser_use.browser', 'BrowserSession'),  # Alias for BrowserSession
 	'BrowserProfile': ('browser_use.browser', 'BrowserProfile'),
@@ -130,18 +119,14 @@ def __getattr__(name: str):
 
 
 __all__ = [
-	'Agent',
 	'CodeAgent',
-	# 'CodeAgent',
 	'BrowserSession',
 	'Browser',  # Alias for BrowserSession
 	'BrowserProfile',
 	'Controller',
 	'DomService',
-	'SystemPrompt',
 	'ActionResult',
 	'ActionModel',
-	'AgentHistoryList',
 	# Chat models
 	'ChatOpenAI',
 	'ChatGoogle',

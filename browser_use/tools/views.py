@@ -1,6 +1,8 @@
-from typing import Generic, TypeVar
+"""Action input models and result types for tools."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Generic, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 
@@ -45,16 +47,11 @@ class SearchAction(BaseModel):
 	)
 
 
-# Backward compatibility alias
-SearchAction = SearchAction
-
-
 class NavigateAction(BaseModel):
 	url: str
 	new_tab: bool = Field(default=False)
 
 
-# Backward compatibility alias
 GoToUrlAction = NavigateAction
 
 
@@ -62,8 +59,6 @@ class ClickElementAction(BaseModel):
 	index: int | None = Field(default=None, ge=1, description='Element index from browser_state')
 	coordinate_x: int | None = Field(default=None, description='Horizontal coordinate relative to viewport left edge')
 	coordinate_y: int | None = Field(default=None, description='Vertical coordinate relative to viewport top edge')
-	# expect_download: bool = Field(default=False, description='set True if expecting a download, False otherwise')  # moved to downloads_watchdog.py
-	# click_count: int = 1  # TODO
 
 
 class ClickElementActionIndexOnly(BaseModel):
@@ -128,7 +123,6 @@ class UploadFileAction(BaseModel):
 class NoParamsAction(BaseModel):
 	model_config = ConfigDict(extra='ignore')
 
-	# Optional field required by Gemini API which errors on empty objects in response_schema
 	description: str | None = Field(None, description='Optional description for the action')
 
 
@@ -179,3 +173,50 @@ class GetDropdownOptionsAction(BaseModel):
 class SelectDropdownOptionAction(BaseModel):
 	index: int
 	text: str = Field(description='exact text/value')
+
+
+# Result types (moved from agent)
+class JudgementResult(BaseModel):
+	"""LLM judgement of agent trace"""
+
+	reasoning: str | None = Field(default=None, description='Explanation of the judgement')
+	verdict: bool = Field(description='Whether the trace was successful or not')
+	failure_reason: str | None = Field(
+		default=None,
+		description='Max 5 sentences explanation of why the task was not completed successfully in case of failure. If verdict is true, use an empty string.',
+	)
+	impossible_task: bool = Field(
+		default=False,
+		description='True if the task was impossible to complete due to vague instructions, broken website, inaccessible links, missing login credentials, or other insurmountable obstacles',
+	)
+	reached_captcha: bool = Field(
+		default=False,
+		description='True if the agent encountered captcha challenges during task execution',
+	)
+
+
+class ActionResult(BaseModel):
+	"""Result of executing an action"""
+
+	is_done: bool | None = False
+	success: bool | None = None
+	judgement: JudgementResult | None = None
+	error: str | None = None
+	attachments: list[str] | None = None
+	images: list[dict[str, Any]] | None = None
+	long_term_memory: str | None = None
+	extracted_content: str | None = None
+	include_extracted_content_only_once: bool = False
+	metadata: dict | None = None
+	include_in_memory: bool = False
+
+	@model_validator(mode='after')
+	def validate_success_requires_done(self):
+		"""Ensure success=True can only be set when is_done=True"""
+		if self.success is True and self.is_done is not True:
+			raise ValueError(
+				'success=True can only be set when is_done=True. '
+				'For regular actions that succeed, leave success as None. '
+				'Use success=False only for actions that fail.'
+			)
+		return self

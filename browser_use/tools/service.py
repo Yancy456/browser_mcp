@@ -12,7 +12,8 @@ except ImportError:
 	Laminar = None  # type: ignore
 from pydantic import BaseModel
 
-from browser_use.agent.views import ActionModel, ActionResult
+from browser_use.tools.registry.views import ActionModel
+from browser_use.tools.views import ActionResult
 from browser_use.browser import BrowserSession
 from browser_use.browser.events import (
 	ClickCoordinateEvent,

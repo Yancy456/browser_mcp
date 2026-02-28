@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 from pytest_httpserver import HTTPServer
 
-from browser_use.agent.views import ActionResult
+from browser_use.tools.views import ActionResult
 from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.filesystem.file_system import FileSystem
 from browser_use.llm.base import BaseChatModel

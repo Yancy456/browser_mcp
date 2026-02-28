@@ -628,51 +628,12 @@ Setup:
 	p.add_argument('--vars', action='store_true', help='Show defined variables')
 
 	# -------------------------------------------------------------------------
-	# Agent Tasks
+	# Task Management (Cloud) - only available if remote mode is installed
 	# -------------------------------------------------------------------------
 
 	from browser_use.skill_cli.install_config import is_mode_available
 
 	remote_available = is_mode_available('remote')
-	local_available = is_mode_available('chromium')
-
-	p = subparsers.add_parser('run', help='Run agent task (requires API key)')
-	p.add_argument('task', help='Task description')
-	p.add_argument('--max-steps', type=int, help='Maximum steps')
-	# Model selection (works both locally and remotely)
-	p.add_argument('--llm', help='LLM model (gpt-4o, claude-sonnet-4-20250514, gemini-2.0-flash)')
-
-	# Cloud-only flags - only show if remote mode is available
-	if remote_available:
-		# Add [remote] hint only if both modes are available (--full install)
-		remote_hint = '[remote] ' if local_available else ''
-		p.add_argument('--session-id', help=f'{remote_hint}Reuse existing cloud session ID')
-		p.add_argument('--proxy-country', help=f'{remote_hint}Proxy country code')
-		p.add_argument('--stream', action='store_true', help=f'{remote_hint}Stream output in real-time')
-		p.add_argument('--wait', action='store_true', help=f'{remote_hint}Wait for task to complete (default: async)')
-		p.add_argument('--flash', action='store_true', help=f'{remote_hint}Enable flash mode')
-		p.add_argument('--keep-alive', action='store_true', help=f'{remote_hint}Keep session alive after task')
-		p.add_argument('--thinking', action='store_true', help=f'{remote_hint}Enable extended reasoning')
-		p.add_argument('--vision', action='store_true', default=None, help=f'{remote_hint}Enable vision')
-		p.add_argument('--no-vision', action='store_true', help=f'{remote_hint}Disable vision')
-		# New SDK features
-		p.add_argument('--start-url', help=f'{remote_hint}URL to start the task from')
-		p.add_argument('--metadata', action='append', metavar='KEY=VALUE', help=f'{remote_hint}Task metadata (can repeat)')
-		p.add_argument('--secret', action='append', metavar='KEY=VALUE', help=f'{remote_hint}Task secrets (can repeat)')
-		p.add_argument(
-			'--allowed-domain',
-			action='append',
-			metavar='DOMAIN',
-			help=f'{remote_hint}Restrict navigation to domains (can repeat)',
-		)
-		p.add_argument('--skill-id', action='append', metavar='ID', help=f'{remote_hint}Enable skill IDs (can repeat)')
-		p.add_argument('--structured-output', metavar='SCHEMA', help=f'{remote_hint}JSON schema for structured output')
-		p.add_argument('--judge', action='store_true', help=f'{remote_hint}Enable judge mode')
-		p.add_argument('--judge-ground-truth', metavar='TEXT', help=f'{remote_hint}Expected answer for judge evaluation')
-
-	# -------------------------------------------------------------------------
-	# Task Management (Cloud) - only available if remote mode is installed
-	# -------------------------------------------------------------------------
 
 	if remote_available:
 		task_p = subparsers.add_parser('task', help='Manage cloud tasks')
@@ -868,88 +829,6 @@ def _parse_key_value_list(items: list[str] | None) -> dict[str, str | None] | No
 			key, value = item.split('=', 1)
 			result[key] = value
 	return result if result else None
-
-
-def _handle_remote_run_with_wait(args: argparse.Namespace) -> int:
-	"""Handle remote run with --wait directly (prints task info immediately, then waits)."""
-	import asyncio
-
-	from browser_use.skill_cli.commands import cloud_session, cloud_task
-
-	if not args.task:
-		print('Error: No task provided', file=sys.stderr)
-		return 1
-
-	try:
-		# Handle vision flag (--vision vs --no-vision)
-		vision: bool | None = None
-		if getattr(args, 'vision', False):
-			vision = True
-		elif getattr(args, 'no_vision', False):
-			vision = False
-
-		# Parse key=value list params
-		metadata = _parse_key_value_list(getattr(args, 'metadata', None))
-		secrets = _parse_key_value_list(getattr(args, 'secret', None))
-
-		# Build session params
-		session_id = getattr(args, 'session_id', None)
-		profile_id = getattr(args, 'profile', None)
-		proxy_country = getattr(args, 'proxy_country', None)
-
-		# Create session first if profile or proxy specified and no session_id
-		if (profile_id or proxy_country) and not session_id:
-			session = cloud_session.create_session(
-				profile_id=profile_id,
-				proxy_country=proxy_country,
-				keep_alive=getattr(args, 'keep_alive', None),
-			)
-			session_id = session.id
-
-		# Create task with all cloud-only flags
-		task_response = cloud_task.create_task(
-			task=args.task,
-			llm=args.llm,
-			session_id=session_id,
-			max_steps=args.max_steps,
-			flash_mode=getattr(args, 'flash', None),
-			thinking=getattr(args, 'thinking', None),
-			vision=vision,
-			start_url=getattr(args, 'start_url', None),
-			metadata=metadata,
-			secrets=secrets,
-			allowed_domains=getattr(args, 'allowed_domain', None),
-			skill_ids=getattr(args, 'skill_id', None),
-			structured_output=getattr(args, 'structured_output', None),
-			judge=getattr(args, 'judge', None),
-			judge_ground_truth=getattr(args, 'judge_ground_truth', None),
-		)
-
-		# Print initial info immediately
-		print(f'mode: {args.browser}')
-		print(f'task_id: {task_response.id}')
-		print(f'session_id: {task_response.session_id}')
-		print('waiting...', end='', flush=True)
-
-		# Wait for completion
-		try:
-			result = asyncio.run(cloud_task.poll_until_complete(task_response.id))
-		except KeyboardInterrupt:
-			print(f'\nInterrupted. Task {task_response.id} continues remotely.')
-			return 0
-
-		# Print final result
-		print(' done.')
-		print(f'status: {result.status}')
-		print(f'output: {result.output}')
-		if result.cost:
-			print(f'cost: {result.cost}')
-
-		return 0
-
-	except Exception as e:
-		print(f'Error: {e}', file=sys.stderr)
-		return 1
 
 
 def main() -> int:
@@ -1183,10 +1062,6 @@ def main() -> int:
 			file=sys.stderr,
 		)
 		return 1
-
-	# Handle remote run with --wait directly (prints task_id immediately, then waits)
-	if args.browser == 'remote' and args.command == 'run' and getattr(args, 'wait', False):
-		return _handle_remote_run_with_wait(args)
 
 	# Ensure server is running
 	ensure_server(args.session, args.browser, args.headed, args.profile, args.api_key)

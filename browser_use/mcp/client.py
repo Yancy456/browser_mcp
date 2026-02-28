@@ -29,7 +29,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from browser_use.agent.views import ActionResult
+from browser_use.tools.views import ActionResult
 from browser_use.telemetry import MCPClientTelemetryEvent, ProductTelemetry
 from browser_use.tools.registry.service import Registry
 from browser_use.tools.service import Tools

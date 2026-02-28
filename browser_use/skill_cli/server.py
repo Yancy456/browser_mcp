@@ -107,11 +107,15 @@ class SessionServer:
 
 		try:
 			# Import command handlers
-			from browser_use.skill_cli.commands import agent, browser, python_exec, session
+			from browser_use.skill_cli.commands import browser, python_exec, session
 
 			# Handle shutdown
 			if action == 'shutdown':
 				return {'id': req_id, 'success': True, 'data': {'shutdown': True}}
+
+			# Run/agent command removed
+			if action == 'run':
+				return {'id': req_id, 'success': False, 'error': 'Agent/run command has been removed'}
 
 			# Session commands don't need a browser session
 			if action in session.COMMANDS:
@@ -134,8 +138,6 @@ class SessionServer:
 				result = await browser.handle(action, session_info, params)
 			elif action == 'python':
 				result = await python_exec.handle(session_info, params)
-			elif action == 'run':
-				result = await agent.handle(session_info, params)
 			else:
 				return {'id': req_id, 'success': False, 'error': f'Unknown action: {action}'}
 

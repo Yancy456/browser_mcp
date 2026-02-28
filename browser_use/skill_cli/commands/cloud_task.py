@@ -44,7 +44,6 @@ def create_task(task: str, **kwargs: Any) -> TaskCreatedResponse:
 		metadata: Task metadata key-value pairs
 		secrets: Task secrets key-value pairs
 		allowed_domains: Restrict navigation to these domains
-		skill_ids: Enable specific skill IDs
 		structured_output: JSON schema for structured output
 		judge: Enable judge mode
 		judge_ground_truth: Expected answer for judge evaluation
