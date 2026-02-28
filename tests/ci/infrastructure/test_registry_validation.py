@@ -19,7 +19,6 @@ from browser_use.tools.views import ActionResult
 from browser_use.browser import BrowserSession
 from browser_use.tools.registry.service import Registry
 from browser_use.tools.registry.views import ActionModel as BaseActionModel
-from tests.ci.conftest import create_mock_llm
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -60,17 +59,14 @@ class TestType1Pattern:
 		"""Type 1 with multiple special params should work"""
 		registry = Registry()
 
-		class ExtractAction(BaseActionModel):
-			goal: str
-			include_links: bool = False
+		class GetUrlAction(BaseActionModel):
+			include_fragment: bool = False
 
-		from browser_use.llm.base import BaseChatModel
+		@registry.action('Get page URL', param_model=GetUrlAction)
+		async def get_url(params: GetUrlAction, browser_session: BrowserSession):
+			return ActionResult(extracted_content=f'url (fragment={params.include_fragment})')
 
-		@registry.action('Extract content', param_model=ExtractAction)
-		async def extract_content(params: ExtractAction, browser_session: BrowserSession, page_extraction_llm: BaseChatModel):
-			return ActionResult(extracted_content=params.goal)
-
-		assert 'extract_content' in registry.registry.actions
+		assert 'get_url' in registry.registry.actions
 
 
 class TestType2Pattern:
@@ -229,7 +225,6 @@ class TestDecoratedFunctionBehavior:
 		# Should work even with extra kwargs
 		special_context = {
 			'browser_session': None,
-			'page_extraction_llm': create_mock_llm(),
 			'context': {'extra': 'data'},
 			'unknown_param': 'ignored',
 		}
@@ -299,7 +294,6 @@ class TestParameterOrdering:
 	def test_mixed_param_ordering(self):
 		"""Should handle any ordering of action params and special params"""
 		registry = Registry()
-		from browser_use.llm.base import BaseChatModel
 
 		# Special params mixed throughout
 		@registry.action('Mixed params')
@@ -308,7 +302,6 @@ class TestParameterOrdering:
 			browser_session: BrowserSession,
 			second: int,
 			third: bool = True,
-			page_extraction_llm: BaseChatModel = None,  # type: ignore
 		):
 			return ActionResult()
 
@@ -319,22 +312,21 @@ class TestParameterOrdering:
 		assert set(model_fields.keys()) == {'first', 'second', 'third'}
 		assert model_fields['third'].default is True
 
-	def test_extract_content_pattern_registration(self):
-		"""Test that the extract_content pattern with mixed params registers correctly"""
+	def test_goal_and_browser_pattern_registration(self):
+		"""Test that goal + browser_session + optional pattern registers correctly"""
 		registry = Registry()
 
-		# This is the problematic pattern: positional arg, then special args, then kwargs with defaults
-		@registry.action('Extract content from page')
-		async def extract_content(
+		@registry.action('Get content from page')
+		async def get_content(
 			goal: str,
-			page_extraction_llm,
+			browser_session: BrowserSession,
 			include_links: bool = False,
 		):
 			return ActionResult(extracted_content=f'Goal: {goal}, include_links: {include_links}')
 
 		# Verify registration
-		assert 'extract_content' in registry.registry.actions
-		action = registry.registry.actions['extract_content']
+		assert 'get_content' in registry.registry.actions
+		action = registry.registry.actions['get_content']
 
 		# Check that the param model only includes user-facing params
 		model_fields = action.param_model.model_fields
@@ -343,12 +335,11 @@ class TestParameterOrdering:
 		assert model_fields['include_links'].default is False
 
 		# Special params should NOT be in the model
-		assert 'page' not in model_fields
-		assert 'page_extraction_llm' not in model_fields
+		assert 'browser_session' not in model_fields
 
 		# Verify the action was properly registered
-		assert action.name == 'extract_content'
-		assert action.description == 'Extract content from page'
+		assert action.name == 'get_content'
+		assert action.description == 'Get content from page'
 
 
 class TestParamsModelArgsAndKwargs:

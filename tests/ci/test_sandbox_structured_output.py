@@ -6,6 +6,10 @@ specifically that the _output_model_schema private attribute is preserved
 through serialization/deserialization.
 """
 
+import pytest
+
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
+pytest.importorskip("browser_use.sandbox", reason="Sandbox has been removed from browser-use")
 from pydantic import BaseModel
 
 from browser_use.agent.views import ActionResult, AgentHistory, AgentHistoryList, BrowserStateHistory

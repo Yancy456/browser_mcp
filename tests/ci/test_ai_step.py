@@ -2,6 +2,9 @@
 
 from unittest.mock import AsyncMock
 
+import pytest
+
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
 from browser_use.agent.service import Agent
 from browser_use.tools.views import ActionResult
 from tests.ci.conftest import create_mock_llm

@@ -5,6 +5,8 @@ import io
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
 from PIL import Image
 
 from browser_use.agent.message_manager.service import MessageManager

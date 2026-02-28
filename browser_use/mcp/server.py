@@ -89,10 +89,9 @@ logging.disable(logging.CRITICAL)
 
 # Import browser_use modules
 from browser_use.browser import BrowserProfile, BrowserSession
-from browser_use.config import get_default_llm, get_default_profile, load_browser_use_config
+from browser_use.config import get_default_profile, load_browser_use_config
 from browser_use.tools.service import Tools
 from browser_use.filesystem.file_system import FileSystem
-from browser_use.llm.openai.chat import ChatOpenAI
 from browser_use.mcp.tools import NO_BROWSER_ACTIONS, build_agent_tools
 
 logger = logging.getLogger(__name__)
@@ -194,7 +193,6 @@ class BrowserUseServer:
 		self.browser_session: BrowserSession | None = None
 		agent_tools_list, agent_tools_instance = build_agent_tools()
 		self.agent_tools_instance: Tools = agent_tools_instance
-		self.llm: ChatOpenAI | None = None
 		self.file_system: FileSystem | None = None
 		self._telemetry = ProductTelemetry()
 		self._start_time = time.time()
@@ -284,7 +282,6 @@ class BrowserUseServer:
 				action_name=tool_name,
 				params=arguments,
 				browser_session=self.browser_session,
-				page_extraction_llm=self.llm,
 				file_system=self.file_system,
 				available_file_paths=[],
 			)
@@ -342,21 +339,7 @@ class BrowserUseServer:
 		# Track the session for management
 		self._track_session(self.browser_session)
 
-		# Initialize LLM from config
-		llm_config = get_default_llm(self.config)
-		base_url = llm_config.get('base_url', None)
-		kwargs = {}
-		if base_url:
-			kwargs['base_url'] = base_url
-		if api_key := llm_config.get('api_key'):
-			self.llm = ChatOpenAI(
-				model=llm_config.get('model', 'gpt-o4-mini'),
-				api_key=api_key,
-				temperature=llm_config.get('temperature', 0.7),
-				**kwargs,
-			)
-
-		# Initialize FileSystem for extraction actions
+		# Initialize FileSystem for file operations
 		file_system_path = profile_config.get('file_system_path', '~/.browser-use-mcp')
 		self.file_system = FileSystem(base_dir=Path(file_system_path).expanduser())
 

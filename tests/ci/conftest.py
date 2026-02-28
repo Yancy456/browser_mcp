@@ -19,8 +19,6 @@ socketserver.ThreadingMixIn.block_on_close = False
 # Also set daemon threads to prevent hanging
 socketserver.ThreadingMixIn.daemon_threads = True
 
-from browser_use.llm import BaseChatModel
-from browser_use.llm.views import ChatInvokeCompletion
 from browser_use.tools.service import Tools
 
 # Load environment variables before any imports
@@ -33,7 +31,6 @@ os.environ['SKIP_LLM_API_KEY_VERIFICATION'] = 'true'
 from bubus import BaseEvent
 
 from browser_use.browser import BrowserProfile, BrowserSession
-from browser_use.sync.service import CloudSync
 
 
 @pytest.fixture(autouse=True)
@@ -71,9 +68,9 @@ def setup_test_environment():
 
 
 # not a fixture, mock_llm() provides this in a fixture below, this is a helper so that it can accept args
-def create_mock_llm(actions: list[str] | None = None) -> BaseChatModel:
-	"""Create a mock LLM. Agent has been removed - skips (tests using this need Agent)."""
-	pytest.skip('Agent has been removed - mock_llm requires AgentOutput')
+def create_mock_llm(actions: list[str] | None = None):
+	"""Create a mock LLM. Agent/LLM have been removed - skips (tests using this need Agent)."""
+	pytest.skip('Agent and LLM have been removed from browser-use')
 
 
 @pytest.fixture(scope='module')
@@ -95,36 +92,13 @@ async def browser_session():
 
 
 @pytest.fixture(scope='function')
-def cloud_sync(httpserver: HTTPServer):
-	"""
-	Create a CloudSync instance configured for testing.
-
-	This fixture creates a real CloudSync instance and sets up the test environment
-	to use the httpserver URLs.
-	"""
-
-	# Set up test environment
-	test_http_server_url = httpserver.url_for('')
-	os.environ['BROWSER_USE_CLOUD_API_URL'] = test_http_server_url
-	os.environ['BROWSER_USE_CLOUD_UI_URL'] = test_http_server_url
-	os.environ['BROWSER_USE_CLOUD_SYNC'] = 'true'
-
-	# Create CloudSync with test server URL
-	cloud_sync = CloudSync(
-		base_url=test_http_server_url,
-	)
-
-	return cloud_sync
-
-
-@pytest.fixture(scope='function')
 def mock_llm():
 	"""Create a mock LLM that just returns the done action if queried"""
 	return create_mock_llm(actions=None)
 
 
 @pytest.fixture(scope='function')
-def agent_with_cloud(browser_session, mock_llm, cloud_sync):
+def agent_with_cloud(browser_session, mock_llm):
 	"""Create agent. Agent has been removed - skips."""
 	pytest.skip('Agent has been removed')
 

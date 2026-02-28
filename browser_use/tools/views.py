@@ -3,24 +3,9 @@
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic.json_schema import SkipJsonSchema
 
 
 # Action Input Models
-class ExtractAction(BaseModel):
-	query: str
-	extract_links: bool = Field(
-		default=False, description='Set True to true if the query requires links, else false to safe tokens'
-	)
-	start_from_char: int = Field(
-		default=0, description='Use this for long markdowns to start from a specific character (not index in browser_state)'
-	)
-	output_schema: SkipJsonSchema[dict | None] = Field(
-		default=None,
-		description='Optional JSON Schema dict. When provided, extraction returns validated JSON matching this schema instead of free-text.',
-	)
-
-
 class SearchPageAction(BaseModel):
 	pattern: str = Field(description='Text or regex pattern to search for in page content')
 	regex: bool = Field(default=False, description='Treat pattern as regex (default: literal text match)')
@@ -147,17 +132,6 @@ class SaveAsPdfAction(BaseModel):
 		default='Letter',
 		description='Paper size: Letter, Legal, A4, A3, or Tabloid',
 	)
-
-
-class ReadContentAction(BaseModel):
-	"""Action for intelligent reading of long content."""
-
-	goal: str = Field(description='What to look for or extract from the content')
-	source: str = Field(
-		default='page',
-		description='What to read: "page" for current webpage, or a file path',
-	)
-	context: str = Field(default='', description='Additional context about the task')
 
 
 class GetStateAction(BaseModel):

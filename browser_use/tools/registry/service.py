@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field, RootModel, create_model
 
 from browser_use.browser import BrowserSession
 from browser_use.filesystem.file_system import FileSystem
-from browser_use.llm.base import BaseChatModel
 from browser_use.observability import observe_debug
 from browser_use.telemetry.service import ProductTelemetry
 from browser_use.tools.registry.views import (
@@ -64,11 +63,9 @@ class Registry(Generic[Context]):
 			'browser_session': BrowserSession,
 			'page_url': str,
 			'cdp_client': None,  # CDPClient type from cdp_use, but we don't import it here
-			'page_extraction_llm': BaseChatModel,
 			'available_file_paths': list,
 			'has_sensitive_data': bool,
 			'file_system': FileSystem,
-			'extraction_schema': None,  # dict | None, skip type validation
 		}
 
 	def _normalize_action_function_signature(
@@ -210,8 +207,6 @@ class Registry(Generic[Context]):
 						if value is None and param.default == Parameter.empty:
 							if param.name == 'browser_session':
 								raise ValueError(f'Action {func.__name__} requires browser_session but none provided.')
-							elif param.name == 'page_extraction_llm':
-								raise ValueError(f'Action {func.__name__} requires page_extraction_llm but none provided.')
 							elif param.name == 'file_system':
 								raise ValueError(f'Action {func.__name__} requires file_system but none provided.')
 							elif param.name == 'page':
@@ -229,8 +224,6 @@ class Registry(Generic[Context]):
 						# Special param is required but not provided
 						if param.name == 'browser_session':
 							raise ValueError(f'Action {func.__name__} requires browser_session but none provided.')
-						elif param.name == 'page_extraction_llm':
-							raise ValueError(f'Action {func.__name__} requires page_extraction_llm but none provided.')
 						elif param.name == 'file_system':
 							raise ValueError(f'Action {func.__name__} requires file_system but none provided.')
 						elif param.name == 'page':
@@ -332,11 +325,9 @@ class Registry(Generic[Context]):
 		action_name: str,
 		params: dict,
 		browser_session: BrowserSession | None = None,
-		page_extraction_llm: BaseChatModel | None = None,
 		file_system: FileSystem | None = None,
 		sensitive_data: dict[str, str | dict[str, str]] | None = None,
 		available_file_paths: list[str] | None = None,
-		extraction_schema: dict | None = None,
 	) -> Any:
 		"""Execute a registered action with simplified parameter handling"""
 		if action_name not in self.registry.actions:
@@ -366,11 +357,9 @@ class Registry(Generic[Context]):
 			# Build special context dict
 			special_context = {
 				'browser_session': browser_session,
-				'page_extraction_llm': page_extraction_llm,
 				'available_file_paths': available_file_paths,
 				'has_sensitive_data': action_name == 'input' and bool(sensitive_data),
 				'file_system': file_system,
-				'extraction_schema': extraction_schema,
 			}
 
 			# Only pass sensitive_data to actions that explicitly need it (input)
@@ -397,9 +386,7 @@ class Registry(Generic[Context]):
 
 		except ValueError as e:
 			# Preserve ValueError messages from validation
-			if 'requires browser_session but none provided' in str(e) or 'requires page_extraction_llm but none provided' in str(
-				e
-			):
+			if 'requires browser_session but none provided' in str(e):
 				raise RuntimeError(str(e)) from e
 			else:
 				raise RuntimeError(f'Error executing action {action_name}: {str(e)}') from e

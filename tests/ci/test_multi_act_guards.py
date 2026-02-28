@@ -14,6 +14,8 @@ Usage:
 import asyncio
 
 import pytest
+
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
 from pytest_httpserver import HTTPServer
 
 from browser_use.agent.service import Agent

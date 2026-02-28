@@ -383,8 +383,6 @@ class Config:
 		# Handle special methods
 		if name == 'get_default_profile':
 			return lambda: self._get_default_profile()
-		elif name == 'get_default_llm':
-			return lambda: self._get_default_llm()
 		elif name == 'get_default_agent':
 			return lambda: self._get_default_agent()
 		elif name == 'load_config':
@@ -423,19 +421,6 @@ class Config:
 
 		return {}
 
-	def _get_default_llm(self) -> dict[str, Any]:
-		"""Get the default LLM configuration."""
-		db_config = self._get_db_config()
-		for llm in db_config.llm.values():
-			if llm.default:
-				return llm.model_dump(exclude_none=True)
-
-		# Return first LLM if no default
-		if db_config.llm:
-			return next(iter(db_config.llm.values())).model_dump(exclude_none=True)
-
-		return {}
-
 	def _get_default_agent(self) -> dict[str, Any]:
 		"""Get the default agent configuration."""
 		db_config = self._get_db_config()
@@ -453,7 +438,6 @@ class Config:
 		"""Load configuration with env var overrides for MCP components."""
 		config = {
 			'browser_profile': self._get_default_profile(),
-			'llm': self._get_default_llm(),
 			'agent': self._get_default_agent(),
 		}
 
@@ -484,12 +468,6 @@ class Config:
 			config.setdefault('browser_profile', {})
 			config['browser_profile']['proxy'] = proxy_dict
 
-		if env_config.OPENAI_API_KEY:
-			config['llm']['api_key'] = env_config.OPENAI_API_KEY
-
-		if env_config.BROWSER_USE_LLM_MODEL:
-			config['llm']['model'] = env_config.BROWSER_USE_LLM_MODEL
-
 		# Extension settings
 		if env_config.BROWSER_USE_DISABLE_EXTENSIONS is not None:
 			config['browser_profile']['enable_default_extensions'] = not env_config.BROWSER_USE_DISABLE_EXTENSIONS
@@ -510,8 +488,3 @@ def load_browser_use_config() -> dict[str, Any]:
 def get_default_profile(config: dict[str, Any]) -> dict[str, Any]:
 	"""Get default browser profile from config dict."""
 	return config.get('browser_profile', {})
-
-
-def get_default_llm(config: dict[str, Any]) -> dict[str, Any]:
-	"""Get default LLM config from config dict."""
-	return config.get('llm', {})

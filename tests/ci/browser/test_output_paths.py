@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
 from browser_use import Agent, AgentHistoryList
 from browser_use.browser import BrowserProfile, BrowserSession
 from tests.ci.conftest import create_mock_llm

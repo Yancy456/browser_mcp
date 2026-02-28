@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+pytest.importorskip("browser_use.llm", reason="LLM has been removed from browser-use")
+
 
 class TestChatBrowserUseRetries:
 	"""Test retry logic for ChatBrowserUse."""

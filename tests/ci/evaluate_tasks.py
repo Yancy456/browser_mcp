@@ -19,9 +19,13 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 load_dotenv()
-from browser_use import Agent, AgentHistoryList, BrowserProfile, BrowserSession, ChatBrowserUse
-from browser_use.llm.google.chat import ChatGoogle
-from browser_use.llm.messages import UserMessage
+
+try:
+	from browser_use import Agent, AgentHistoryList, BrowserProfile, BrowserSession, ChatBrowserUse
+	from browser_use.llm.google.chat import ChatGoogle
+	from browser_use.llm.messages import UserMessage
+except ModuleNotFoundError as e:
+	sys.exit(f"evaluate_tasks requires Agent/LLM modules which have been removed: {e}")
 
 # --- CONFIG ---
 MAX_PARALLEL = 10

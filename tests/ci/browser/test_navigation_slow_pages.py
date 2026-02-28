@@ -12,6 +12,8 @@ import asyncio
 import time
 
 import pytest
+
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
 from pytest_httpserver import HTTPServer
 from werkzeug import Response
 

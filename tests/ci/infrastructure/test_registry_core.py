@@ -20,7 +20,6 @@ from pytest_httpserver.httpserver import HandlerType
 from browser_use.tools.views import ActionResult
 from browser_use.browser import BrowserSession
 from browser_use.browser.profile import BrowserProfile
-from browser_use.llm.messages import UserMessage
 from browser_use.tools.registry.service import Registry
 from browser_use.tools.registry.views import ActionModel as BaseActionModel
 from browser_use.tools.views import (
@@ -29,7 +28,6 @@ from browser_use.tools.views import (
 	NoParamsAction,
 	SearchAction,
 )
-from tests.ci.conftest import create_mock_llm
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -79,12 +77,6 @@ def http_server():
 def base_url(http_server):
 	"""Return the base URL for the test HTTP server."""
 	return f'http://{http_server.host}:{http_server.port}'
-
-
-@pytest.fixture(scope='module')
-def mock_llm():
-	"""Create a mock LLM"""
-	return create_mock_llm()
 
 
 @pytest.fixture(scope='function')
@@ -177,24 +169,19 @@ class TestActionRegistryParameterPatterns:
 		assert 'Text: test, Number: 100, Flag: True' in result.extracted_content
 		assert base_url in result.extracted_content
 
-	async def test_mixed_special_parameters(self, registry, browser_session, base_url, mock_llm):
-		"""Test action with multiple special injected parameters"""
+	async def test_special_params_with_available_file_paths(self, registry, browser_session, base_url):
+		"""Test action with browser_session and available_file_paths injection"""
 
-		from browser_use.llm.base import BaseChatModel
-
-		@registry.action('Action with multiple special params')
-		async def multi_special_action(
+		@registry.action('Action with browser and file paths')
+		async def action_with_files(
 			text: str,
 			browser_session: BrowserSession,
-			page_extraction_llm: BaseChatModel,
 			available_file_paths: list,
 		):
-			llm_response = await page_extraction_llm.ainvoke([UserMessage(content='test')])
 			files = available_file_paths or []
 			url = await browser_session.get_current_page_url()
-
 			return ActionResult(
-				extracted_content=f'Text: {text}, URL: {url}, LLM: {llm_response.completion}, Files: {len(files)}'
+				extracted_content=f'Text: {text}, URL: {url}, Files: {len(files)}'
 			)
 
 		# Navigate to test page first
@@ -205,10 +192,9 @@ class TestActionRegistryParameterPatterns:
 
 		# Test execution
 		result = await registry.execute_action(
-			'multi_special_action',
+			'action_with_files',
 			{'text': 'hello'},
 			browser_session=browser_session,
-			page_extraction_llm=mock_llm,
 			available_file_paths=['file1.txt', 'file2.txt'],
 		)
 
@@ -216,8 +202,6 @@ class TestActionRegistryParameterPatterns:
 		assert result.extracted_content is not None
 		assert 'Text: hello' in result.extracted_content
 		assert base_url in result.extracted_content
-		# The mock LLM returns a JSON response
-		assert '"Task completed successfully"' in result.extracted_content
 		assert 'Files: 2' in result.extracted_content
 
 	async def test_no_params_action(self, registry, browser_session):
@@ -393,26 +377,6 @@ class TestRegistryEdgeCases:
 				'requires_browser',
 				{'text': 'test'},
 				# No browser_session provided
-			)
-
-	async def test_missing_required_llm(self, registry, browser_session):
-		"""Test that actions requiring page_extraction_llm fail appropriately when not provided"""
-
-		from browser_use.llm.base import BaseChatModel
-
-		@registry.action('Requires LLM')
-		async def requires_llm(text: str, browser_session: BrowserSession, page_extraction_llm: BaseChatModel):
-			url = await browser_session.get_current_page_url()
-			llm_response = await page_extraction_llm.ainvoke([UserMessage(content='test')])
-			return ActionResult(extracted_content=f'Text: {text}, LLM: {llm_response.completion}')
-
-		# Should raise RuntimeError when page_extraction_llm is required but not provided
-		with pytest.raises(RuntimeError, match='requires page_extraction_llm but none provided'):
-			await registry.execute_action(
-				'requires_llm',
-				{'text': 'test'},
-				browser_session=browser_session,
-				# No page_extraction_llm provided
 			)
 
 	async def test_invalid_parameters(self, registry, browser_session):

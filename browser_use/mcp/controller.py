@@ -142,7 +142,6 @@ class MCPToolWrapper:
 				'page',
 				'browser_session',
 				'context',
-				'page_extraction_llm',
 				'file_system',
 				'available_file_paths',
 				'has_sensitive_data',

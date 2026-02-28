@@ -1,5 +1,8 @@
 """Unit tests for variable detection in agent history"""
 
+import pytest
+
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
 from browser_use.agent.variable_detector import (
 	_detect_from_attributes,
 	_detect_from_value_pattern,

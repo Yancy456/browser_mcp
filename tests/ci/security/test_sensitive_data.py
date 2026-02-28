@@ -1,6 +1,7 @@
 import pytest
 from pydantic import BaseModel, Field
 
+pytest.importorskip("browser_use.agent", reason="Agent has been removed from browser-use")
 from browser_use.agent.message_manager.service import MessageManager
 from browser_use.agent.views import ActionResult, AgentOutput, AgentStepInfo, MessageManagerState
 from browser_use.browser.views import BrowserStateSummary
